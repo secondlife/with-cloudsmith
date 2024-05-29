@@ -1,0 +1,411 @@
+#!/usr/bin/env bash
+
+set -eo pipefail
+
+LOGLEVEL_WARN=1
+LOGLEVEL_INFO=2
+LOGLEVEL_DEBUG=3
+LOGLEVEL=$LOGLEVEL_INFO
+
+# Define a root directory. This is useful for testing.
+ROOT="$WITH_CLOUDSMITH_ROOT"
+
+# Detect whether we are being sourced.
+(return 0 2>/dev/null) && SOURCED=1 || SOURCED=0
+
+REGISTRIES=()
+KEEP=0
+
+function usage {
+  cat <<EOF
+Usage: with-cloudsmith [options] command
+
+  Set up private Cloudsmith registries temporarily.
+
+Options:
+  -r, --repo <repo>       Cloudsmith repository name
+  -o, --org <org>         Cloudsmith organization name
+  -v, --verbose           Enable verbose output
+  -vv                     Enable debug output
+  -s, --silent            Silence output
+  --pip                   Enable PIP registry
+  --deb                   Enable Debian registry
+  -k, --keep              Keep temporary files
+  -h, --help              Show this help message
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -r|--repo)
+      shift
+      CLOUDSMITH_REPO="$1"
+      shift
+      ;;
+    -o|--org)
+      shift
+      CLOUDSMITH_ORG="$1"
+      shift
+      ;;
+    -v|--verbose)
+      LOGLEVEL=$LOGLEVEL_DEBUG
+      shift
+      ;;
+    -vv)
+      LOGLEVEL=$LOGLEVEL_DEBUG
+      set -x
+      shift
+      ;;
+    -s|--silent)
+      LOGLEVEL=$LOGLEVEL_WARN
+      shift
+      ;;
+    --pip)
+      REGISTRIES+=("pip")
+      shift
+      ;;
+    --deb)
+      REGISTRIES+=("deb")
+      shift
+      ;;
+    -k|--keep)
+      KEEP=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
+################################
+# Credentials
+################################
+
+function have_creds {
+  # Have credentials been sourced?
+  if [[ -n "$CLOUDSMITH_TOKEN" ]] || [[ -n "$CLOUDSMITH_API_KEY" ]] || [[ -n "$CLOUDSMITH_PASSWORD" ]]; then
+    _set_user
+    _set_password
+    return 0
+  fi
+  return 1
+}
+
+function _load_creds_from_secrets {
+  # Re-export credentials from /run/secrets files. This is handy when using docker build secrets.
+  local creds=(CLOUDSMITH_API_KEY CLOUDSMITH_TOKEN CLOUDSMITH_USER CLOUDSMITH_PASSWORD)
+  for v in "${creds[@]}"; do
+    if [ -f "$ROOT/run/secrets/$v" ]; then
+      debug "Re-exporting $ROOT/run/secrets/$v"
+      lc="${v,,}"
+      declare -x "$lc"="$(< "$ROOT/run/secrets/$v")"
+    fi
+  done
+  # Is there a beter way to do this? Declare -x does not seem to work.
+  # shellcheck disable=SC2154
+  CLOUDSMITH_API_KEY="$cloudsmith_api_key"
+  # shellcheck disable=SC2154
+  CLOUDSMITH_TOKEN="$cloudsmith_token"
+  # shellcheck disable=SC2154
+  CLOUDSMITH_USER="$cloudsmith_user"
+  # shellcheck disable=SC2154
+  CLOUDSMITH_PASSWORD="$cloudsmith_password"
+}
+
+function _load_creds_from_inis {
+  # Attempt to load the api_key= value from credentials.ini files
+  # https://help.cloudsmith.io/docs/cli#configuration--setup
+  local api_key=
+  local wd=
+  wd="$(pwd)"
+  local searchpath=("$wd" "$ROOT$HOME/.cloudsmith" "$ROOT$HOME/.config/cloudsmith")
+  for d in "${searchpath[@]}"; do
+    if [ -f "$d/credentials.ini" ]; then
+      # shellcheck disable=SC1090
+      source <(grep ^api_key= "$d/credentials.ini")
+      if [[ -n "$api_key" ]]; then
+        debug "Loaded api_key from $d/credentials.ini"
+        CLOUDSMITH_API_KEY="$api_key"
+        return
+      fi
+    fi
+  done
+}
+
+function _set_password {
+  # Password explicitly set? If so, return.
+  if [[ -n "$CLOUDSMITH_PASSWORD" ]]; then
+    return
+  fi
+  # Otherwise, if we've received an API Key or Token then we need to set the password up for use with basic auth.
+  if [[ -n "$CLOUDSMITH_API_KEY" ]]; then
+    CLOUDSMITH_PASSWORD="$CLOUDSMITH_API_KEY"
+  elif [[ -n "$CLOUDSMITH_TOKEN" ]]; then
+    CLOUDSMITH_PASSWORD="$CLOUDSMITH_TOKEN"
+  fi
+}
+
+function _set_user {
+  if [[ -n "$CLOUDSMITH_TOKEN" ]]; then
+    # If we received a token then we need to set the user to "token" for use with basic auth.
+    CLOUDSMITH_USER="token"
+  elif [[ -n "$CLOUDSMITH_API_KEY" ]] && [[ -z "$CLOUDSMITH_USER" ]]; then
+    debug "CLOUDSMITH_API_KEY found but username not set. Retrieving username from API."
+    # If we received an API Key but no username then we need to retrieve the username for use with basic auth.
+    CLOUDSMITH_USER="$(_cloudsmith_api_get_user_slug)"
+  fi
+}
+
+function load_creds {
+  if have_creds; then return; fi
+  _load_creds_from_secrets
+  if have_creds; then return; fi
+  _load_creds_from_inis
+}
+
+function export_creds {
+  export CLOUDSMITH_API_KEY
+  export CLOUDSMITH_ORG
+  export CLOUDSMITH_PASSWORD
+  export CLOUDSMITH_REPO
+  export CLOUDSMITH_TOKEN
+  export CLOUDSMITH_USER
+}
+
+################################
+# Logging
+################################
+
+function fatal {
+  echo "$@" >&2
+  exit 1
+}
+
+function warn {
+  if (( LOGLEVEL >= LOGLEVEL_WARN )); then
+    echo "$@" >&2
+  fi
+}
+
+function info {
+  if (( LOGLEVEL >= LOGLEVEL_INFO )); then
+    echo "$@" >&2
+  fi
+}
+
+function debug {
+  if (( LOGLEVEL >= LOGLEVEL_DEBUG )); then
+    echo "$@" >&2
+  fi
+}
+
+################################
+# Utilities
+################################
+
+function registry_enabled {
+  local registry="$1"
+  for r in "${REGISTRIES[@]}"; do
+    if [[ "$r" == "$registry" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+# shellcheck disable=SC2120
+function os_id {
+  # Returns the os-release ID field, ex "debian" or "ubuntu" from ID="debian"
+  local release_file="${1:-"$ROOT/etc/os-release"}"
+  # shellcheck source=/etc/os-release
+  echo "$(source "$release_file"; echo "$ID")"
+}
+
+# shellcheck disable=SC2120
+function os_codename {
+  # Return debian version codename, ex "buster" from VERSION="10 (buster)"
+  local release_file="${1:-"$ROOT/etc/os-release"}"
+  if [ ! -f "$release_file" ]; then
+    return
+  fi
+
+  local codename=
+  # shellcheck source=/etc/os-release
+  codename="$(source "$release_file"; echo "$VERSION_CODENAME")"
+
+  if [[ -n "$codename" ]]; then
+    echo "$codename"
+  else
+    grep "^VERSION=" < "$release_file" | cut -d \( -f2 | cut -d \) -f1
+  fi
+}
+
+function json_value {
+  # A rather sloppy way to extract a value from a json string.
+  local key="$1"
+  local json="$2"
+  echo "$json" | tr ',' '\n' | grep "\"$key\"" | cut -d\" -f4 || true
+}
+
+################################
+# Cloudsmith API Utilities
+################################
+
+function _cloudsmith_api_curl {
+  local res=
+  debug "curl: $*"
+  if [[ -n "$CLOUDSMITH_API_KEY" ]]; then
+    debug "curl: Using X-Api-Key for authentication"
+    # shellcheck disable=SC2068
+    curl -sf -H"X-Api-Key: $CLOUDSMITH_API_KEY" $@
+  else
+    debug "curl: Using basic auth for authentication"
+    # shellcheck disable=SC2068
+    curl -sf -u "$CLOUDSMITH_USER:$CLOUDSMITH_PASSWORD" $@
+  fi
+}
+
+function _cloudsmith_api_get_user_slug {
+  # Get user slug
+  local res=
+  res="$(_cloudsmith_api_curl https://api.cloudsmith.io/v1/user/self/)"
+  json_value slug "$res"
+}
+
+function _cloudsmith_api_get_public_key {
+  # Get active GPG fingerprint of a repository
+  local org="$1"
+  local repo="$2"
+  local res=
+  local public_key=
+  res="$(_cloudsmith_api_curl "https://api.cloudsmith.io/v1/repos/$org/$repo/gpg/")"
+  public_key="$(json_value public_key "$res")"
+  # Unescape
+  printf "%b\n" "$public_key"
+}
+
+################################
+# Debian package utilities
+################################
+
+function _setup_deb_gpg {
+  local public_key=
+  public_key="$(_cloudsmith_api_get_public_key "$CLOUDSMITH_ORG" "$CLOUDSMITH_REPO")"
+  mkdir -p "$ROOT/etc/apt/keyrings"
+  echo "$public_key" | gpg --dearmor -o "$ROOT/etc/apt/keyrings/$CLOUDSMITH_ORG-$CLOUDSMITH_REPO.gpg"
+}
+
+function _setup_deb_source {
+  local keyring="$ROOT/etc/apt/keyrings/$CLOUDSMITH_ORG-$CLOUDSMITH_REPO.gpg"
+  local codename=
+  local id=
+  # shellcheck disable=SC2119
+  codename="$(os_codename)"
+  # shellcheck disable=SC2119
+  id="$(os_id)"
+
+  mkdir -p "$ROOT/etc/apt/sources.list.d"
+  mkdir -p "$ROOT/etc/apt/auth.conf.d"
+
+  cat > "$ROOT/etc/apt/sources.list.d/$CLOUDSMITH_ORG-$CLOUDSMITH_REPO.list" << EOF
+deb [signed-by=$keyring] https://dl.cloudsmith.io/basic/$CLOUDSMITH_ORG/$CLOUDSMITH_REPO/deb/$id $codename main
+deb-src [signed-by=$keyring] https://dl.cloudsmith.io/basic/$CLOUDSMITH_ORG/$CLOUDSMITH_REPO/deb/$id $codename main
+EOF
+
+  cat > "$ROOT/etc/apt/auth.conf.d/$CLOUDSMITH_ORG-$CLOUDSMITH_REPO.conf" << EOF
+machine dl.cloudsmith.io
+login $CLOUDSMITH_USER
+password $CLOUDSMITH_PASSWORD
+EOF
+}
+
+function setup_deb {
+  _setup_deb_gpg
+  _setup_deb_source
+  apt-get -qq update
+}
+
+function teardown_deb {
+  rm "$ROOT/etc/apt/auth.conf.d/$CLOUDSMITH_ORG-$CLOUDSMITH_REPO.conf"
+  rm "$ROOT/etc/apt/keyrings/$CLOUDSMITH_ORG-$CLOUDSMITH_REPO.gpg"
+  rm "$ROOT/etc/apt/sources.list.d/$CLOUDSMITH_ORG-$CLOUDSMITH_REPO.list"
+}
+
+################################
+# Python PIP
+################################
+
+function setup_pip {
+  if [ -f "$ROOT/etc/pip.conf" ]; then
+    mv "$ROOT/etc/pip.conf" "$ROOT/etc/pip.conf.bak"
+  fi
+
+  mkdir -p "$ROOT/etc"
+
+  cat > "$ROOT/etc/pip.conf" << EOF
+[global]
+index-url = https://$CLOUDSMITH_USER:$CLOUDSMITH_PASSWORD@dl.cloudsmith.io/basic/$CLOUDSMITH_ORG/$CLOUDSMITH_REPO/python/simple/
+EOF
+}
+
+function teardown_pip {
+  if [ -f "$ROOT/etc/pip.conf.bak" ]; then
+    mv "$ROOT/etc/pip.conf.bak" "$ROOT/etc/pip.conf"
+    return
+  fi
+  rm "$ROOT/etc/pip.conf"
+}
+
+################################
+# Main functions
+################################
+
+function setup {
+  load_creds
+  if have_creds; then
+    if registry_enabled deb; then setup_deb; fi
+    if registry_enabled pip; then setup_pip; fi
+  else
+    info "Skipping Cloudsmith setup (no credentials)"
+  fi
+}
+
+function cleanup {
+  if registry_enabled pip; then teardown_pip; fi
+  if registry_enabled deb; then teardown_deb; fi
+}
+
+function check_creds {
+  load_creds
+  if have_creds; then
+    info "Credentials are present"
+    exit 0
+  else
+    fatal "No credentials found"
+  fi
+}
+
+function validate_args {
+  if [[ -z "$CLOUDSMITH_REPO" ]]; then
+    fatal "No repository (-r|--repo) specified"
+  fi
+  if [[ -z "$CLOUDSMITH_ORG" ]]; then
+    fatal "No organization (-o|--org) specified"
+  fi
+}
+
+# If we are being sourced, don't run the main function.
+if [[ $SOURCED -eq 0 ]]; then
+  validate_args
+  if [[ $KEEP -eq 0 ]]; then
+    trap cleanup EXIT
+  fi
+  setup
+  export_creds
+  "$@"
+fi
