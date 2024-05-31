@@ -357,9 +357,9 @@ function setup_deb {
 }
 
 function teardown_deb {
-  rm "$ROOT/etc/apt/auth.conf.d/$CLOUDSMITH_ORG-$CLOUDSMITH_REPO.conf"
-  rm "$ROOT/etc/apt/keyrings/$CLOUDSMITH_ORG-$CLOUDSMITH_REPO.gpg"
-  rm "$ROOT/etc/apt/sources.list.d/$CLOUDSMITH_ORG-$CLOUDSMITH_REPO.list"
+  rm -rf "$ROOT/etc/apt/auth.conf.d/$CLOUDSMITH_ORG-$CLOUDSMITH_REPO.conf"
+  rm -rf "$ROOT/etc/apt/keyrings/$CLOUDSMITH_ORG-$CLOUDSMITH_REPO.gpg"
+  rm -rf "$ROOT/etc/apt/sources.list.d/$CLOUDSMITH_ORG-$CLOUDSMITH_REPO.list"
 }
 
 ################################
@@ -384,7 +384,7 @@ function teardown_pip {
     mv "$ROOT/etc/pip.conf.bak" "$ROOT/etc/pip.conf"
     return
   fi
-  rm "$ROOT/etc/pip.conf"
+  rm -rf "$ROOT/etc/pip.conf"
 }
 
 ################################
