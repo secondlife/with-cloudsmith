@@ -186,6 +186,22 @@ create_osrelease() {
   assert_success
 }
 
+@test "credentials are loaded from /run/secrets/cloudsmith (ini)" {
+  mkdir -p "$TMPDIR/run/secrets"
+  echo -e "[default]\napi_key=test-api-key" > "$TMPDIR/run/secrets/cloudsmith"
+  run with-cloudsmith -s bash -c 'echo $CLOUDSMITH_API_KEY'
+  assert_output "test-api-key"
+  assert_success
+}
+
+@test "credentials are loaded from /run/secrets/cloudsmith (source)" {
+  mkdir -p "$TMPDIR/run/secrets"
+  echo "CLOUDSMITH_API_KEY=test-api-key" > "$TMPDIR/run/secrets/cloudsmith"
+  run with-cloudsmith -s bash -c 'echo $CLOUDSMITH_API_KEY'
+  assert_output "test-api-key"
+  assert_success
+}
+
 @test "credentials are loaded from credentials.ini" {
   mkdir -p "$TMPDIR$HOME/.cloudsmith"
   echo -e "[default]\napi_key=test-api-key" > "$TMPDIR$HOME/.cloudsmith/credentials.ini"

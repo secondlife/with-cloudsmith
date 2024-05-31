@@ -96,7 +96,44 @@ function have_creds {
   return 1
 }
 
+function _load_ini {
+  local file="$1"
+  # shellcheck disable=SC1090
+  source <(grep ^api_key= "$file")
+  if [[ -n "$api_key" ]]; then
+    debug "Loaded api_key from $d/credentials.ini"
+    CLOUDSMITH_API_KEY="$api_key"
+    return
+  fi
+}
+
+function _load_creds_from_inis {
+  # Attempt to load the api_key= value from credentials.ini files
+  # https://help.cloudsmith.io/docs/cli#configuration--setup
+  local api_key=
+  local wd=
+  wd="$(pwd)"
+  local searchpath=("$wd" "$ROOT$HOME/.cloudsmith" "$ROOT$HOME/.config/cloudsmith")
+  for d in "${searchpath[@]}"; do
+    if [ -f "$d/credentials.ini" ]; then
+      _load_ini "$d/credentials.ini"
+    fi
+  done
+}
+
 function _load_creds_from_secrets {
+  # Allow the user to mount a special "cloudsmith" file in /run/secrets to provide credentials.
+  # This file can either be a credentials.ini file or a simple key=value file to source.
+  if [ -f "$ROOT/run/secrets/cloudsmith" ]; then
+    if grep -q "\[default\]" "$ROOT/run/secrets/cloudsmith"; then
+      _load_ini "$ROOT/run/secrets/cloudsmith"
+    else
+      source "$ROOT/run/secrets/cloudsmith"
+    fi
+  fi
+
+  if have_creds; then return; fi
+
   # Re-export credentials from /run/secrets files. This is handy when using docker build secrets.
   local creds=(CLOUDSMITH_API_KEY CLOUDSMITH_TOKEN CLOUDSMITH_USER CLOUDSMITH_PASSWORD)
   for v in "${creds[@]}"; do
@@ -115,26 +152,6 @@ function _load_creds_from_secrets {
   CLOUDSMITH_USER="$cloudsmith_user"
   # shellcheck disable=SC2154
   CLOUDSMITH_PASSWORD="$cloudsmith_password"
-}
-
-function _load_creds_from_inis {
-  # Attempt to load the api_key= value from credentials.ini files
-  # https://help.cloudsmith.io/docs/cli#configuration--setup
-  local api_key=
-  local wd=
-  wd="$(pwd)"
-  local searchpath=("$wd" "$ROOT$HOME/.cloudsmith" "$ROOT$HOME/.config/cloudsmith")
-  for d in "${searchpath[@]}"; do
-    if [ -f "$d/credentials.ini" ]; then
-      # shellcheck disable=SC1090
-      source <(grep ^api_key= "$d/credentials.ini")
-      if [[ -n "$api_key" ]]; then
-        debug "Loaded api_key from $d/credentials.ini"
-        CLOUDSMITH_API_KEY="$api_key"
-        return
-      fi
-    fi
-  done
 }
 
 function _set_password {
