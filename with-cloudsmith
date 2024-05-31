@@ -329,16 +329,25 @@ function _setup_deb_source {
   mkdir -p "$ROOT/etc/apt/sources.list.d"
   mkdir -p "$ROOT/etc/apt/auth.conf.d"
 
-  cat > "$ROOT/etc/apt/sources.list.d/$CLOUDSMITH_ORG-$CLOUDSMITH_REPO.list" << EOF
+  if [[ $codename =~ ^(jessie|stretch)$ ]]; then
+    # Use basic auth hard-coded into the source file for older Debian versions
+    cat > "$ROOT/etc/apt/sources.list.d/$CLOUDSMITH_ORG-$CLOUDSMITH_REPO.list" << EOF
+deb [signed-by=$keyring] https://$CLOUDSMITH_USER:$CLOUDSMITH_PASSWORD@dl.cloudsmith.io/basic/$CLOUDSMITH_ORG/$CLOUDSMITH_REPO/deb/$id $codename main
+deb-src [signed-by=$keyring] https://$CLOUDSMITH_USER:$CLOUDSMITH_PASSWORD@dl.cloudsmith.io/basic/$CLOUDSMITH_ORG/$CLOUDSMITH_REPO/deb/$id $codename main
+EOF
+  else
+    # Otherwise, provide a valid auth.conf.d file
+    cat > "$ROOT/etc/apt/sources.list.d/$CLOUDSMITH_ORG-$CLOUDSMITH_REPO.list" << EOF
 deb [signed-by=$keyring] https://dl.cloudsmith.io/basic/$CLOUDSMITH_ORG/$CLOUDSMITH_REPO/deb/$id $codename main
 deb-src [signed-by=$keyring] https://dl.cloudsmith.io/basic/$CLOUDSMITH_ORG/$CLOUDSMITH_REPO/deb/$id $codename main
 EOF
 
-  cat > "$ROOT/etc/apt/auth.conf.d/$CLOUDSMITH_ORG-$CLOUDSMITH_REPO.conf" << EOF
+    cat > "$ROOT/etc/apt/auth.conf.d/$CLOUDSMITH_ORG-$CLOUDSMITH_REPO.conf" << EOF
 machine dl.cloudsmith.io
 login $CLOUDSMITH_USER
 password $CLOUDSMITH_PASSWORD
 EOF
+  fi
 }
 
 function setup_deb {

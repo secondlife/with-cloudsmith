@@ -37,7 +37,7 @@ setup() {
   export -f apt-get
 
   # Provide a default /etc/os-release
-  create_osrelease "$JESSIE_OS_RELEASE"
+  create_osrelease "$BOOKWORM_OS_RELEASE"
 }
 
 teardown() {
@@ -239,6 +239,17 @@ create_osrelease() {
   [ ! -f $TMPDIR/etc/apt/sources.list.d/org-repo.list ]
   [ ! -f $TMPDIR/etc/apt/auth.conf.d/org-repo.conf ]
   [ ! -f $TMPDIR/etc/apt/keyrings/org-repo.gpg ]
+}
+
+@test "basic auth is included in deb sources on older debian versions" {
+  setup_deb_mocks
+  create_osrelease "$JESSIE_OS_RELEASE"
+  run with-cloudsmith --deb --keep
+  assert_success
+  list="$(< $TMPDIR/etc/apt/sources.list.d/org-repo.list)"
+  [ -f $TMPDIR/etc/apt/sources.list.d/org-repo.list ]
+  [ ! -f $TMPDIR/etc/apt/auth.conf.d/org-repo.conf ]
+  [[ "$list" =~ "test-user:test-api-key@dl.cloudsmith.io" ]]
 }
 
 @test "pip.conf is set up" {
