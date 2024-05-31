@@ -75,8 +75,7 @@ Build the image the same as before, passing a build `--secret`.
 - Environment variables: `CLOUDSMITH_API_KEY`, `CLOUDSMITH_TOKEN`, `CLOUDSMITH_USER`, `CLOUDSMITH_PASSWORD`
 - Ini files: `$HOME/.cloudsmith/credentials.ini`, `$HOME/.config/credentials.ini`, `$PWD/credentials.ini`
 - Docker build secrets: `/run/secrets/CLOUDSMITH_API_KEY`, et al.
-
-If you wish to use an OIDC token, you will want to use `CLOUDSMITH_TOKEN`.
+- `/run/secrets/cloudsmith`: A special file that can either be your cloudsmith-cli credentials.ini or a source-able dotenv.
 
 ## Tips and tricks
 
