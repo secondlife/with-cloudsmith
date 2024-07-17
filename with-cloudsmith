@@ -28,6 +28,7 @@ Options:
   -v, --verbose           Enable verbose output
   -vv                     Enable debug output
   -s, --silent            Silence output
+  --composer              Enable Composer registry
   --pip                   Enable PIP registry
   --deb                   Enable Debian registry
   -k, --keep              Keep temporary files
@@ -58,6 +59,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     -s|--silent)
       LOGLEVEL=$LOGLEVEL_WARN
+      shift
+      ;;
+    --composer)
+      REGISTRIES+=("composer")
       shift
       ;;
     --pip)
@@ -363,6 +368,38 @@ function teardown_deb {
 }
 
 ################################
+# PHP Composer
+################################
+
+function setup_composer {
+  local auth_file="$ROOT$HOME/.config/composer/auth.json"
+  if [ -f "$auth_file" ]; then
+    mv "$auth_file" "$auth_file.bak"
+  fi
+
+  mkdir -p "$(dirname "$auth_file")"
+
+  cat > "$auth_file" << EOF
+{
+  "http-basic": {
+    "dl.cloudsmith.io": {
+      "username": "$CLOUDSMITH_USER",
+      "password": "$CLOUDSMITH_PASSWORD"
+    }
+  }
+}
+EOF
+}
+
+function teardown_composer {
+  local auth_file="$ROOT$HOME/.config/composer/auth.json"
+  rm -rf "$auth_file"
+  if [ -f "$auth_file.bak" ]; then
+    mv "$auth_file.bak" "$auth_file"
+  fi
+}
+
+################################
 # Python PIP
 ################################
 
@@ -394,6 +431,7 @@ function teardown_pip {
 function setup {
   load_creds
   if have_creds; then
+    if registry_enabled composer; then setup_composer; fi
     if registry_enabled deb; then setup_deb; fi
     if registry_enabled pip; then setup_pip; fi
   else
@@ -402,6 +440,7 @@ function setup {
 }
 
 function cleanup {
+  if registry_enabled composer; then teardown_composer; fi
   if registry_enabled pip; then teardown_pip; fi
   if registry_enabled deb; then teardown_deb; fi
 }
