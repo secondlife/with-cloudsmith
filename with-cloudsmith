@@ -18,7 +18,7 @@ KEEP=0
 
 function usage {
   cat <<EOF
-Usage: with-cloudsmith [options] command
+Usage: with-cloudsmith [options] [--] command
 
   Set up private Cloudsmith registries temporarily.
 
@@ -80,6 +80,12 @@ while [[ $# -gt 0 ]]; do
     -h|--help)
       usage
       exit 0
+      ;;
+    --)
+      # Consume the `--`...
+      shift
+      # but that's still the end of the options.
+      break
       ;;
     *)
       break
