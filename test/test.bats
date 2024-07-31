@@ -273,3 +273,26 @@ create_osrelease() {
   assert_success
   assert_equal "$(<$TMPDIR/etc/pip.conf)" "old"
 }
+
+@test "composer auth.json is set up" {
+  export CLOUDSMITH_API_KEY="test-api-key"
+  run with-cloudsmith --composer --keep
+  assert_success
+  [ -f $TMPDIR$HOME/.config/composer/auth.json ]
+}
+
+@test "composer auth.json is cleaned up" {
+  export CLOUDSMITH_API_KEY="test-api-key"
+  run with-cloudsmith --composer
+  assert_success
+  [ ! -f $TMPDIR$HOME/.config/composer/auth.json ]
+}
+
+@test "existing composer auth.json is restored" {
+  export CLOUDSMITH_API_KEY="test-api-key"
+  mkdir -p "$TMPDIR$HOME/.config/composer"
+  echo "old" > $TMPDIR$HOME/.config/composer/auth.json
+  run with-cloudsmith --composer
+  assert_success
+  assert_equal "$(<$TMPDIR$HOME/.config/composer/auth.json)" "old"
+}
