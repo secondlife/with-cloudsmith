@@ -372,7 +372,7 @@ function teardown_deb {
 ################################
 
 function setup_composer {
-  local auth_file="$ROOT$HOME/.config/composer/auth.json"
+  local auth_file="$ROOT$HOME/.composer/auth.json"
   if [ -f "$auth_file" ]; then
     mv "$auth_file" "$auth_file.bak"
   fi
@@ -385,6 +385,10 @@ function setup_composer {
     "dl.cloudsmith.io": {
       "username": "$CLOUDSMITH_USER",
       "password": "$CLOUDSMITH_PASSWORD"
+    },
+    "cloudsmith.secondlife.io": {
+      "username": "$CLOUDSMITH_USER",
+      "password": "$CLOUDSMITH_PASSWORD"
     }
   }
 }
@@ -392,7 +396,7 @@ EOF
 }
 
 function teardown_composer {
-  local auth_file="$ROOT$HOME/.config/composer/auth.json"
+  local auth_file="$ROOT$HOME/.composer/auth.json"
   rm -rf "$auth_file"
   if [ -f "$auth_file.bak" ]; then
     mv "$auth_file.bak" "$auth_file"
