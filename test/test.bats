@@ -96,6 +96,12 @@ create_osrelease() {
   assert_equal "$status" "127"
 }
 
+@test "runs subcommand separated with --" {
+  run with-cloudsmith -s -- echo "foo"
+  assert_success
+  assert_output "foo"
+}
+
 @test "requires --org" {
   export CLOUDSMITH_ORG=
   run with-cloudsmith

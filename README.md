@@ -12,8 +12,8 @@ Supported registry types:
 
 ## Use
 
-```
-Usage: with-cloudsmith [options] command
+```text
+Usage: with-cloudsmith [options] [--] command
 
   Set up private Cloudsmith registries temporarily.
 
