@@ -392,7 +392,7 @@ function setup_composer {
       "username": "$CLOUDSMITH_USER",
       "password": "$CLOUDSMITH_PASSWORD"
     },
-    "cloudsmith.secondlife.io": {
+    "composer.secondlife.io": {
       "username": "$CLOUDSMITH_USER",
       "password": "$CLOUDSMITH_PASSWORD"
     }
