@@ -285,6 +285,18 @@ create_osrelease() {
   run with-cloudsmith --composer --keep
   assert_success
   [ -f $TMPDIR$HOME/.composer/auth.json ]
+  cat $TMPDIR$HOME/.composer/auth.json | jq type
+}
+
+@test "composer auth.json supports secondary domain" {
+  export CLOUDSMITH_API_KEY="test-api-key"
+  export CLOUDSMITH_COMPOSER_ALT_DOMAIN="example.com"
+  run with-cloudsmith --composer --keep
+  cat $TMPDIR$HOME/.composer/auth.json
+  assert_success
+  [ -f $TMPDIR$HOME/.composer/auth.json ]
+  grep "example.com" $TMPDIR$HOME/.composer/auth.json
+  cat $TMPDIR$HOME/.composer/auth.json | jq type
 }
 
 @test "composer auth.json is cleaned up" {

@@ -73,6 +73,8 @@ Build the image the same as before, passing a build `--secret`.
 **with-cloudsmith** desperately searches the following locations for credentials:
 
 - Environment variables: `CLOUDSMITH_API_KEY`, `CLOUDSMITH_TOKEN`, `CLOUDSMITH_USER`, `CLOUDSMITH_PASSWORD`
+    - Format Specific Environment Variables
+    - Composer: `CLOUDSMITH_COMPOSER_ALT_DOMAIN`
 - Ini files: `$HOME/.cloudsmith/credentials.ini`, `$HOME/.config/credentials.ini`, `$PWD/credentials.ini`
 - Docker build secrets: `/run/secrets/CLOUDSMITH_API_KEY`, et al.
 - `/run/secrets/cloudsmith`: A special file that can either be your cloudsmith-cli credentials.ini or a source-able dotenv.

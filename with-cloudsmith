@@ -391,10 +391,18 @@ function setup_composer {
     "dl.cloudsmith.io": {
       "username": "$CLOUDSMITH_USER",
       "password": "$CLOUDSMITH_PASSWORD"
+EOF
+  if [ -n "$CLOUDSMITH_COMPOSER_ALT_DOMAIN" ]; then
+    cat >> "$auth_file" << EOF
     },
-    "cloudsmith.secondlife.io": {
+    "$CLOUDSMITH_COMPOSER_ALT_DOMAIN": {
       "username": "$CLOUDSMITH_USER",
       "password": "$CLOUDSMITH_PASSWORD"
+EOF
+  fi
+
+  # Close the JSON object
+  cat >> "$auth_file" << EOF
     }
   }
 }
