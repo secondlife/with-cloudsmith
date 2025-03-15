@@ -9,6 +9,7 @@ Supported registry types:
 
 - Debian
 - Pip (Python)
+- Composer (PHP)
 
 ## Use
 
