@@ -34,7 +34,7 @@ First, add **with-cloudsmith** to your Dockerfile:
 ```dockerfile
 FROM debian:bookworm-slim
 
-ADD https://raw.githubusercontent.com/secondlife/with-cloudsmith/v0.1.0/with-cloudsmith /usr/bin/
+ADD --chmod=555 https://raw.githubusercontent.com/secondlife/with-cloudsmith/v0.1.0/with-cloudsmith /usr/bin/
 ```
 
 ## Debian
